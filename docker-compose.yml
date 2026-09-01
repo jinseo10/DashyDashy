@@ -43,8 +43,27 @@ services:
       - WEATHER_LOCATION_NAME=${WEATHER_LOCATION_NAME:-New York}
       - WEATHER_UNITS=${WEATHER_UNITS:-fahrenheit}
       - DISK_MOUNTPOINTS=${DISK_MOUNTPOINTS:-/}
+      - GRAFANA_PORT=${GRAFANA_PORT:-3001}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - prometheus
+    networks:
+      - dashydashy
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dashydashy-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
     networks:
@@ -56,3 +75,4 @@ networks:
 
 volumes:
   prometheus-data:
+  grafana-data:

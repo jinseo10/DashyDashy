@@ -194,7 +194,18 @@ function initTheme() {
   });
 }
 
+async function initGrafanaLink() {
+  try {
+    const res = await fetch("/api/config", { cache: "no-store" });
+    const { grafanaPort } = await res.json();
+    $("grafana-link").href = `${location.protocol}//${location.hostname}:${grafanaPort}`;
+  } catch {
+    $("grafana-link").remove();
+  }
+}
+
 initTheme();
+initGrafanaLink();
 tickClock();
 setInterval(tickClock, 1000);
 refresh();

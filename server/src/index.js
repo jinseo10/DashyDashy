@@ -79,6 +79,10 @@ app.get("/api/all", async (_req, res) => {
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
+app.get("/api/config", (_req, res) => {
+  res.json({ grafanaPort: Number(process.env.GRAFANA_PORT) || 3001 });
+});
+
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.listen(PORT, () => {
