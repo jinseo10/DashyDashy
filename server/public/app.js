@@ -1,4 +1,4 @@
-const POLL_MS = 10000;
+const POLL_MS = 1000;
 
 const $ = (id) => document.getElementById(id);
 
@@ -39,11 +39,37 @@ function fmtUptime(seconds) {
   return `${minutes}m`;
 }
 
-function barClass(percent) {
+function fmtTemp(celsius) {
+  if (celsius == null || Number.isNaN(celsius)) return "N/A";
+  return `${Math.round(celsius)}°C`;
+}
+
+function fmtTempF(celsius) {
+  if (celsius == null || Number.isNaN(celsius)) return "--°F";
+  return `${Math.round((celsius * 9) / 5 + 32)}°F`;
+}
+
+function severityClass(percent) {
   if (percent == null) return "";
   if (percent >= 90) return "critical";
   if (percent >= 75) return "warning";
   return "";
+}
+
+// Rough, hardware-agnostic guidance: comfortably idle below ~65C, worth
+// keeping an eye on into the 80s, hot beyond that.
+function tempSeverityClass(celsius) {
+  if (celsius == null) return "";
+  if (celsius >= 85) return "critical";
+  if (celsius >= 70) return "warning";
+  return "";
+}
+
+function tempDotColor(celsius) {
+  if (celsius == null) return "var(--text-muted)";
+  if (celsius >= 85) return "var(--critical)";
+  if (celsius >= 70) return "var(--warning)";
+  return "var(--good)";
 }
 
 function stateDotColor(state) {
@@ -61,6 +87,14 @@ function stateDotColor(state) {
   }
 }
 
+function setRing(el, percent) {
+  const clamped = Math.min(Math.max(percent ?? 0, 0), 100);
+  el.style.setProperty("--pct", clamped);
+  el.classList.remove("warning", "critical");
+  const cls = severityClass(percent);
+  if (cls) el.classList.add(cls);
+}
+
 function renderWeather(weather, error) {
   if (error || !weather) {
     $("weather-condition").textContent = "Unavailable";
@@ -75,58 +109,145 @@ function renderWeather(weather, error) {
   $("weather-wind").textContent = weather.windSpeed != null ? `${Math.round(weather.windSpeed)} ${weather.windUnits}` : "--";
 }
 
+function temperatureCard(name, source, celsius) {
+  const card = document.createElement("div");
+  card.className = "shelf-card";
+  card.innerHTML = `
+    <div class="shelf-card-head">
+      <span class="status-dot" style="background:${tempDotColor(celsius)}"></span>
+      <div class="shelf-card-name">
+        <b>${name}</b>
+        <span>${source}</span>
+      </div>
+    </div>
+    <div class="shelf-card-value">${fmtTemp(celsius)}</div>
+    <div class="shelf-card-sub">${fmtTempF(celsius)}</div>
+  `;
+  return card;
+}
+
+function renderTemperatures(temperatures) {
+  const shelf = $("card-temps");
+  const track = $("temp-shelf-track");
+  track.innerHTML = "";
+
+  if (!temperatures) {
+    $("temp-summary").textContent = "unavailable";
+    track.innerHTML = '<p class="muted">No sensor data.</p>';
+    return;
+  }
+
+  const cards = [];
+  if (temperatures.cpu != null) cards.push({ name: "CPU", source: "package", celsius: temperatures.cpu });
+  (temperatures.gpu || []).forEach((g) => cards.push({ name: "GPU", source: g.label, celsius: g.celsius }));
+  (temperatures.drives || []).forEach((d) => cards.push({ name: "Drive", source: d.label, celsius: d.celsius }));
+  (temperatures.other || []).forEach((o) => cards.push({ name: o.source, source: o.label, celsius: o.celsius }));
+
+  if (!cards.length) {
+    track.innerHTML = '<p class="muted">No sensors found.</p>';
+  } else {
+    cards.forEach((c) => track.appendChild(temperatureCard(c.name, c.source, c.celsius)));
+  }
+
+  $("temp-summary").textContent = cards.length ? `${cards.length} sensors` : "no sensors found";
+  syncShelfOverflow(shelf, track);
+}
+
+function diskCard(disk) {
+  const card = document.createElement("div");
+  card.className = "shelf-card shelf-card-wide";
+  const sev = severityClass(disk.usedPercent);
+  card.innerHTML = `
+    <div class="shelf-card-head">
+      <div class="shelf-card-name">
+        <b>${disk.mountpoint}</b>
+        <span>${disk.device}</span>
+      </div>
+    </div>
+    <div class="shelf-card-value">${fmtPercent(disk.usedPercent)}</div>
+    <div class="shelf-card-bar-row">
+      <div class="bar"><div class="bar-fill ${sev}" style="width:${Math.min(disk.usedPercent ?? 0, 100)}%"></div></div>
+    </div>
+    <div class="shelf-card-metrics">
+      <span>Used <b>${fmtBytes(disk.usedBytes)}</b></span>
+      <span>Total <b>${fmtBytes(disk.totalBytes)}</b></span>
+    </div>
+  `;
+  return card;
+}
+
+function renderDisks(disks) {
+  const shelf = $("card-storage");
+  const track = $("disk-shelf-track");
+  track.innerHTML = "";
+
+  if (!disks || !disks.length) {
+    track.innerHTML = '<p class="muted">No filesystems reported.</p>';
+    $("disk-summary").textContent = "0 volumes";
+    return;
+  }
+
+  disks
+    .slice()
+    .sort((a, b) => a.mountpoint.localeCompare(b.mountpoint))
+    .forEach((disk) => track.appendChild(diskCard(disk)));
+
+  $("disk-summary").textContent = `${disks.length} volume${disks.length === 1 ? "" : "s"}`;
+  syncShelfOverflow(shelf, track);
+}
+
 function renderSystem(system, error) {
   if (error || !system) return;
 
-  const { cpu, memory, disks, network, uptimeSeconds } = system;
+  const { cpu, memory, disks, network, temperatures, uptimeSeconds } = system;
 
   $("cpu-usage").textContent = fmtPercent(cpu.usagePercent);
   $("cpu-cores").textContent = cpu.coreCount ? `${cpu.coreCount} cores` : "-- cores";
-  const cpuBar = $("cpu-bar");
-  cpuBar.style.width = `${Math.min(cpu.usagePercent ?? 0, 100)}%`;
-  cpuBar.className = `bar-fill ${barClass(cpu.usagePercent)}`;
+  setRing($("cpu-ring"), cpu.usagePercent);
   $("cpu-freq").textContent = cpu.currentFrequencyHz ? fmtHz(cpu.currentFrequencyHz) : cpu.maxFrequencyHz ? `${fmtHz(cpu.maxFrequencyHz)} (max)` : "N/A";
   $("cpu-load").textContent = [cpu.load1, cpu.load5, cpu.load15].map((v) => (v != null ? v.toFixed(2) : "--")).join(" / ");
 
   $("memory-usage").textContent = fmtPercent(memory.usedPercent);
   $("memory-total").textContent = memory.totalBytes ? `${fmtBytes(memory.totalBytes)} total` : "-- total";
-  const memBar = $("memory-bar");
-  memBar.style.width = `${Math.min(memory.usedPercent ?? 0, 100)}%`;
-  memBar.className = `bar-fill ${barClass(memory.usedPercent)}`;
+  setRing($("memory-ring"), memory.usedPercent);
   $("memory-used").textContent = memory.usedBytes != null ? fmtBytes(memory.usedBytes) : "N/A";
   $("memory-swap").textContent = memory.swapTotalBytes ? `${fmtBytes(memory.swapUsedBytes)} / ${fmtBytes(memory.swapTotalBytes)}` : "None";
 
-  const diskList = $("disk-list");
-  diskList.innerHTML = "";
-  if (!disks || !disks.length) {
-    diskList.innerHTML = '<p class="muted">No filesystems reported.</p>';
-  } else {
-    disks
-      .sort((a, b) => a.mountpoint.localeCompare(b.mountpoint))
-      .forEach((disk) => {
-        const row = document.createElement("div");
-        row.className = "disk-row";
-        row.innerHTML = `
-          <div class="disk-row-head">
-            <span>${disk.mountpoint}</span>
-            <b>${fmtPercent(disk.usedPercent)} &middot; ${fmtBytes(disk.usedBytes)} / ${fmtBytes(disk.totalBytes)}</b>
-          </div>
-          <div class="bar"><div class="bar-fill ${barClass(disk.usedPercent)}" style="width:${Math.min(disk.usedPercent, 100)}%"></div></div>
-        `;
-        diskList.appendChild(row);
-      });
-  }
-
   $("net-rx").textContent = fmtRate(network.rxBytesPerSec);
   $("net-tx").textContent = fmtRate(network.txBytesPerSec);
-
   $("uptime-value").textContent = fmtUptime(uptimeSeconds);
+
+  renderTemperatures(temperatures);
+  renderDisks(disks);
+}
+
+function containerCard(c) {
+  const card = document.createElement("div");
+  card.className = "shelf-card shelf-card-wide";
+  const cpuText = c.cpuPercent != null ? fmtPercent(c.cpuPercent) : "--";
+  const memText = c.memory?.usedBytes != null ? fmtBytes(c.memory.usedBytes) : "--";
+  card.innerHTML = `
+    <div class="shelf-card-head">
+      <span class="status-dot" style="background:${stateDotColor(c.state)}" title="${c.status}"></span>
+      <div class="shelf-card-name">
+        <b>${c.name}</b>
+        <span>${c.image}</span>
+      </div>
+    </div>
+    <div class="shelf-card-metrics">
+      <span>CPU <b>${cpuText}</b></span>
+      <span>Mem <b>${memText}</b></span>
+    </div>
+    <div class="shelf-card-sub">${c.status}</div>
+  `;
+  return card;
 }
 
 function renderDocker(containers, error) {
-  const list = $("container-list");
+  const shelf = $("card-docker");
+  const track = $("container-shelf-track");
   if (error || !containers) {
-    list.innerHTML = '<p class="muted">Unable to reach the Docker socket.</p>';
+    track.innerHTML = '<p class="muted">Unable to reach the Docker socket.</p>';
     $("docker-summary").textContent = "unavailable";
     return;
   }
@@ -134,31 +255,50 @@ function renderDocker(containers, error) {
   const running = containers.filter((c) => c.state === "running").length;
   $("docker-summary").textContent = `${running} running / ${containers.length} total`;
 
+  track.innerHTML = "";
   if (!containers.length) {
-    list.innerHTML = '<p class="muted">No containers found.</p>';
+    track.innerHTML = '<p class="muted">No containers found.</p>';
     return;
   }
 
-  list.innerHTML = "";
   containers
+    .slice()
     .sort((a, b) => (a.state === b.state ? a.name.localeCompare(b.name) : a.state === "running" ? -1 : 1))
-    .forEach((c) => {
-      const row = document.createElement("div");
-      row.className = "container-row";
-      row.innerHTML = `
-        <span class="status-dot" style="background:${stateDotColor(c.state)}" title="${c.status}"></span>
-        <div class="container-name">
-          <b>${c.name}</b>
-          <span>${c.image}</span>
-        </div>
-        <span class="container-metric">${c.cpuPercent != null ? fmtPercent(c.cpuPercent) : "--"}</span>
-        <span class="container-metric">${c.memory?.usedBytes != null ? fmtBytes(c.memory.usedBytes) : "--"}</span>
-      `;
-      list.appendChild(row);
-    });
+    .forEach((c) => track.appendChild(containerCard(c)));
+
+  syncShelfOverflow(shelf, track);
+}
+
+// Shows the edge-fade mask only when a shelf actually has more content than
+// fits, and lets a plain mouse wheel scroll it horizontally (most people
+// don't have a trackpad handy on a wall-mounted or kiosk display).
+function syncShelfOverflow(shelf, track) {
+  if (!shelf || !track) return;
+  const scrollable = track.scrollWidth > track.clientWidth + 4;
+  shelf.classList.toggle("has-overflow", scrollable);
+}
+
+function initShelfWheelScroll() {
+  document.querySelectorAll(".shelf-track").forEach((track) => {
+    track.addEventListener(
+      "wheel",
+      (e) => {
+        if (track.scrollWidth <= track.clientWidth) return;
+        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+        track.scrollLeft += e.deltaY;
+        e.preventDefault();
+      },
+      { passive: false }
+    );
+  });
 }
 
 async function refresh() {
+  // Skip the network round trip while the tab isn't visible (e.g. a
+  // backgrounded browser tab) rather than polling a server nobody's
+  // looking at every second.
+  if (document.hidden) return;
+
   const statusDot = $("conn-status");
   try {
     const res = await fetch("/api/all", { cache: "no-store" });
@@ -204,9 +344,31 @@ async function initGrafanaLink() {
   }
 }
 
+function initFadeIn() {
+  document.querySelectorAll(".hero-card, .shelf").forEach((el, i) => {
+    el.classList.add("fade-in");
+    el.style.animationDelay = `${Math.min(i * 60, 240)}ms`;
+  });
+}
+
 initTheme();
 initGrafanaLink();
+initFadeIn();
+initShelfWheelScroll();
 tickClock();
 setInterval(tickClock, 1000);
-refresh();
-setInterval(refresh, POLL_MS);
+window.addEventListener("resize", () => {
+  syncShelfOverflow($("card-temps"), $("temp-shelf-track"));
+  syncShelfOverflow($("card-storage"), $("disk-shelf-track"));
+  syncShelfOverflow($("card-docker"), $("container-shelf-track"));
+});
+// Self-scheduling rather than setInterval, so a slow response at a 1s
+// cadence can't pile up overlapping requests.
+function scheduleRefresh() {
+  refresh().finally(() => setTimeout(scheduleRefresh, POLL_MS));
+}
+scheduleRefresh();
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refresh();
+});

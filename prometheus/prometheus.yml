@@ -1,6 +1,10 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  # Scraped this often so the dashboard's 1s polling has fresh numbers to
+  # show rather than repeating the same 15s-old sample. Increases Prometheus's
+  # sample volume (and disk use) roughly 7x versus the old 15s default — see
+  # README > Notes if you're on constrained storage (e.g. an SD card).
+  scrape_interval: 2s
+  evaluation_interval: 2s
 
 scrape_configs:
   - job_name: "node-exporter"
@@ -10,3 +14,10 @@ scrape_configs:
   - job_name: "prometheus"
     static_configs:
       - targets: ["localhost:9090"]
+
+  # Only scraped successfully when the optional nvidia-gpu-exporter service
+  # is running (docker compose --profile gpu-nvidia up -d); otherwise this
+  # target just shows as down, which is harmless.
+  - job_name: "nvidia-gpu-exporter"
+    static_configs:
+      - targets: ["nvidia-gpu-exporter:9835"]

@@ -31,9 +31,12 @@ function withCache(fn, ttlMs) {
   };
 }
 
-const cachedSystemMetrics = withCache(getSystemMetrics, 5000);
-const cachedContainers = withCache(getContainers, 5000);
-const cachedWeather = withCache(getWeather, 5000);
+// System/Docker are cheap to re-fetch and benefit from staying current
+// second-to-second; weather doesn't change that fast (and weather.js itself
+// already holds a 10-minute cache in front of the actual Open-Meteo call).
+const cachedSystemMetrics = withCache(getSystemMetrics, 1000);
+const cachedContainers = withCache(getContainers, 1000);
+const cachedWeather = withCache(getWeather, 30000);
 
 app.get("/api/system", async (_req, res) => {
   try {
