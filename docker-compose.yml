@@ -35,7 +35,7 @@ services:
     container_name: dashydashy-dashboard
     restart: unless-stopped
     ports:
-      - "${DASHBOARD_PORT:-3000}:3000"
+      - "${DASHBOARD_PORT:-8080}:3000"
     environment:
       - PROMETHEUS_URL=http://prometheus:9090
       - WEATHER_LAT=${WEATHER_LAT:-40.7128}

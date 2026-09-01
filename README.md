@@ -41,7 +41,7 @@ graphs and dashboard editing beyond what the single-screen mobile view shows.
    docker compose up -d --build
    ```
 
-3. Open `http://<your-server-ip>:3000` from any device on your network,
+3. Open `http://<your-server-ip>:8080` from any device on your network,
    including your phone. The layout is responsive and works well as a
    pinned mobile browser tab. A "Grafana ↗" link in the header opens Grafana
    directly.
@@ -120,7 +120,7 @@ if you haven't already exposed it — see the note below).
   15-day retention window; adjust `--storage.tsdb.retention.time` in
   `docker-compose.yml` if you want longer history.
 - Prometheus (`:9090`) and node_exporter (`:9100`) aren't published to the
-  host by default — only the dashboard (`:3000`) and Grafana (`:3001`) are,
+  host by default — only the dashboard (`:8080`) and Grafana (`:3001`) are,
   both configurable via `DASHBOARD_PORT`/`GRAFANA_PORT`. Add a `ports:` entry
   in `docker-compose.yml` for `prometheus` if you want to query it directly.
 - The web UI polls `/api/all` every 10 seconds; the server itself caches
