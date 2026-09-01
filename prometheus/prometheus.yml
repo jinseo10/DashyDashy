@@ -1,6 +1,10 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  # Scraped this often so the dashboard's 1s polling has fresh numbers to
+  # show rather than repeating the same 15s-old sample. Increases Prometheus's
+  # sample volume (and disk use) roughly 7x versus the old 15s default — see
+  # README > Notes if you're on constrained storage (e.g. an SD card).
+  scrape_interval: 2s
+  evaluation_interval: 2s
 
 scrape_configs:
   - job_name: "node-exporter"

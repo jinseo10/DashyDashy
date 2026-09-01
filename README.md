@@ -123,6 +123,18 @@ if you haven't already exposed it — see the note below).
   host by default — only the dashboard (`:8080`) and Grafana (`:3001`) are,
   both configurable via `DASHBOARD_PORT`/`GRAFANA_PORT`. Add a `ports:` entry
   in `docker-compose.yml` for `prometheus` if you want to query it directly.
-- The web UI polls `/api/all` every 10 seconds; the server itself caches
-  Prometheus/Docker/weather lookups for a few seconds so multiple open tabs
-  don't cause redundant queries.
+- **Refresh rate**: the web UI polls `/api/all` every second — Docker
+  container stats are read live from the socket on every poll, so those
+  numbers are always current to the second. Prometheus-backed numbers (CPU,
+  memory, disk, network, temperatures) are only as fresh as node_exporter's
+  own scrape interval, set to `2s` in `prometheus/prometheus.yml` (down from
+  the usual 15s default) so there's actually something new to show each
+  poll. That's ~7x more samples than the 15s default, which grows
+  Prometheus's disk usage proportionally — fine on a normal disk, but worth
+  lowering `--storage.tsdb.retention.time` in `docker-compose.yml` (or
+  raising `scrape_interval` back up) if you're running off an SD card or
+  otherwise tight on storage. The dashboard server also caches each
+  Prometheus/Docker/weather lookup for ~1 second so several open tabs share
+  one round trip instead of each triggering their own. A backgrounded
+  browser tab pauses its own polling automatically and catches up the
+  moment it's visible again.

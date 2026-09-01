@@ -1,4 +1,4 @@
-const POLL_MS = 10000;
+const POLL_MS = 1000;
 
 const $ = (id) => document.getElementById(id);
 
@@ -294,6 +294,11 @@ function initShelfWheelScroll() {
 }
 
 async function refresh() {
+  // Skip the network round trip while the tab isn't visible (e.g. a
+  // backgrounded browser tab) rather than polling a server nobody's
+  // looking at every second.
+  if (document.hidden) return;
+
   const statusDot = $("conn-status");
   try {
     const res = await fetch("/api/all", { cache: "no-store" });
@@ -357,5 +362,13 @@ window.addEventListener("resize", () => {
   syncShelfOverflow($("card-storage"), $("disk-shelf-track"));
   syncShelfOverflow($("card-docker"), $("container-shelf-track"));
 });
-refresh();
-setInterval(refresh, POLL_MS);
+// Self-scheduling rather than setInterval, so a slow response at a 1s
+// cadence can't pile up overlapping requests.
+function scheduleRefresh() {
+  refresh().finally(() => setTimeout(scheduleRefresh, POLL_MS));
+}
+scheduleRefresh();
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refresh();
+});
