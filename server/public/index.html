@@ -60,6 +60,27 @@
         </div>
       </section>
 
+      <!-- Temperatures -->
+      <section class="card card-wide" id="card-temps">
+        <div class="card-head">
+          <h2>Temperatures</h2>
+          <span class="muted" id="temp-summary">-- sensors</span>
+        </div>
+        <div class="temp-hero-row">
+          <div class="temp-hero">
+            <span class="muted">CPU</span>
+            <span class="stat-value" id="temp-cpu">--°</span>
+            <span class="muted" id="temp-cpu-alt">--°F</span>
+          </div>
+          <div class="temp-hero" id="temp-gpu-hero">
+            <span class="muted">GPU</span>
+            <span class="stat-value" id="temp-gpu">--°</span>
+            <span class="muted" id="temp-gpu-alt">--°F</span>
+          </div>
+        </div>
+        <div class="temp-list" id="temp-list"></div>
+      </section>
+
       <!-- Memory -->
       <section class="card" id="card-memory">
         <div class="card-head">

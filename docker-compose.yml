@@ -44,6 +44,8 @@ services:
       - WEATHER_UNITS=${WEATHER_UNITS:-fahrenheit}
       - DISK_MOUNTPOINTS=${DISK_MOUNTPOINTS:-/}
       - GRAFANA_PORT=${GRAFANA_PORT:-3001}
+      - TEMP_CPU_CHIP_REGEX=${TEMP_CPU_CHIP_REGEX:-}
+      - TEMP_GPU_CHIP_REGEX=${TEMP_GPU_CHIP_REGEX:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
@@ -66,6 +68,25 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
+    networks:
+      - dashydashy
+
+  # Optional: NVIDIA GPU temperature via nvidia-smi, exposed to Prometheus.
+  # Requires the NVIDIA Container Toolkit on the host. Start it with:
+  #   docker compose --profile gpu-nvidia up -d
+  nvidia-gpu-exporter:
+    image: utkuozdemir/nvidia-gpu-exporter:latest
+    container_name: dashydashy-nvidia-gpu-exporter
+    restart: unless-stopped
+    profiles:
+      - gpu-nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     networks:
       - dashydashy
 

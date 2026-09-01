@@ -192,6 +192,53 @@
           "legendFormat": "{{mountpoint}}"
         }
       ]
+    },
+    {
+      "id": 10,
+      "title": "Sensor Temperatures",
+      "description": "Every hwmon sensor (CPU cores/package, AMD GPU, NVMe drives, motherboard, etc.), labeled by chip and sensor name. The dashboard's CPU/GPU classification lives in the app server, not here, so all raw sensors show side by side.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 24, "w": 16, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": { "fillOpacity": 0, "lineWidth": 2, "drawStyle": "line" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_hwmon_temp_celsius * on (chip) group_left(chip_name) node_hwmon_chip_names",
+          "legendFormat": "{{chip_name}} {{sensor}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "NVIDIA GPU Temp",
+      "description": "Requires the optional nvidia-gpu-exporter service (docker compose --profile gpu-nvidia up -d). Empty otherwise.",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 16, "y": 24, "w": 8, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "nvidia_smi_temperature_gpu", "legendFormat": "{{name}}" }
+      ]
     }
   ]
 }

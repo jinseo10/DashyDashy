@@ -61,6 +61,26 @@ function stateDotColor(state) {
   }
 }
 
+function fmtTemp(celsius) {
+  if (celsius == null || Number.isNaN(celsius)) return "N/A";
+  return `${Math.round(celsius)}°C`;
+}
+
+function fmtTempF(celsius) {
+  if (celsius == null || Number.isNaN(celsius)) return "--°F";
+  return `${Math.round((celsius * 9) / 5 + 32)}°F`;
+}
+
+// Rough, hardware-agnostic guidance: comfortably idle below ~65C, worth
+// keeping an eye on into the 80s, hot beyond that. Not a substitute for
+// vendor-specific thresholds if you know your hardware's actual limits.
+function tempDotColor(celsius) {
+  if (celsius == null) return "var(--text-muted)";
+  if (celsius >= 85) return "var(--critical)";
+  if (celsius >= 70) return "var(--warning)";
+  return "var(--good)";
+}
+
 function renderWeather(weather, error) {
   if (error || !weather) {
     $("weather-condition").textContent = "Unavailable";
@@ -78,7 +98,7 @@ function renderWeather(weather, error) {
 function renderSystem(system, error) {
   if (error || !system) return;
 
-  const { cpu, memory, disks, network, uptimeSeconds } = system;
+  const { cpu, memory, disks, network, temperatures, uptimeSeconds } = system;
 
   $("cpu-usage").textContent = fmtPercent(cpu.usagePercent);
   $("cpu-cores").textContent = cpu.coreCount ? `${cpu.coreCount} cores` : "-- cores";
@@ -121,6 +141,60 @@ function renderSystem(system, error) {
   $("net-tx").textContent = fmtRate(network.txBytesPerSec);
 
   $("uptime-value").textContent = fmtUptime(uptimeSeconds);
+
+  renderTemperatures(temperatures);
+}
+
+function temperatureRow(name, source, celsius) {
+  const row = document.createElement("div");
+  row.className = "temp-row";
+  row.innerHTML = `
+    <span class="status-dot" style="background:${tempDotColor(celsius)}"></span>
+    <div class="temp-row-name">
+      <b>${name}</b>
+      <span>${source}</span>
+    </div>
+    <span class="temp-row-value">${fmtTemp(celsius)} <span class="muted">${fmtTempF(celsius)}</span></span>
+  `;
+  return row;
+}
+
+function renderTemperatures(temperatures) {
+  const list = $("temp-list");
+  list.innerHTML = "";
+
+  if (!temperatures) {
+    $("temp-summary").textContent = "unavailable";
+    $("temp-cpu").textContent = "--°";
+    $("temp-cpu-alt").textContent = "--°F";
+    $("temp-gpu-hero").classList.add("temp-hidden");
+    return;
+  }
+
+  $("temp-cpu").textContent = fmtTemp(temperatures.cpu);
+  $("temp-cpu-alt").textContent = fmtTempF(temperatures.cpu);
+
+  const gpuList = temperatures.gpu || [];
+  if (gpuList.length) {
+    $("temp-gpu-hero").classList.remove("temp-hidden");
+    $("temp-gpu").textContent = fmtTemp(gpuList[0].celsius);
+    $("temp-gpu-alt").textContent = fmtTempF(gpuList[0].celsius);
+  } else {
+    $("temp-gpu-hero").classList.add("temp-hidden");
+  }
+
+  // Extra GPUs beyond the hero slot, plus drive and motherboard/other
+  // sensors, all get a compact row below.
+  const rows = [
+    ...gpuList.slice(1).map((g) => ({ name: g.label, source: "GPU", celsius: g.celsius })),
+    ...(temperatures.drives || []).map((d) => ({ name: d.label, source: "Drive", celsius: d.celsius })),
+    ...(temperatures.other || []).map((o) => ({ name: o.label, source: o.source, celsius: o.celsius })),
+  ];
+
+  rows.forEach((r) => list.appendChild(temperatureRow(r.name, r.source, r.celsius)));
+
+  const sensorCount = (temperatures.cpuSensors?.length || 0) + gpuList.length + (temperatures.drives?.length || 0) + (temperatures.other?.length || 0);
+  $("temp-summary").textContent = sensorCount ? `${sensorCount} sensors` : "no sensors found";
 }
 
 function renderDocker(containers, error) {
